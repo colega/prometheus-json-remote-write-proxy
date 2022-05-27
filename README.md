@@ -37,6 +37,7 @@ This proxy receives JSON-encoded [`prompb.RemoteWrite` requests](https://github.
       ],
       "samples": [
         {
+          "timestamp": 42,
           "value": 1
         }
       ],
@@ -48,6 +49,7 @@ This proxy receives JSON-encoded [`prompb.RemoteWrite` requests](https://github.
               "value": "g"
             }
           ],
+          "timestamp": 42,
           "value": 1
         }
       ]
