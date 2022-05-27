@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/go-kit/log"
@@ -53,10 +54,14 @@ func main() {
 		listenAddress      string
 		path               string
 		remoteWriteAddress string
+		logHeadersList     string
+		forwardHeadersList string
 	)
 	flag.StringVar(&listenAddress, "listen-address", "0.0.0.0:9091", "Listen address of the server.")
 	flag.StringVar(&path, "path", "/write", "Path where write requests will be received.")
 	flag.StringVar(&remoteWriteAddress, "remote-write-address", "", "Address where remote writes should be sent.")
+	flag.StringVar(&logHeadersList, "log-headers", "", "Comma-separated of headers to log (useful for Mimir's X-Org-ScopeID header)")
+	flag.StringVar(&forwardHeadersList, "forward-headers", "", "Comma-separated list of headers to forward (useful for Mimir's X-Org-ScopeID header)")
 	flag.Parse()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -68,6 +73,9 @@ func main() {
 		level.Error(logger).Log("msg", "should specify a valid remote-write-address", "err", err)
 		os.Exit(1)
 	}
+
+	logHeaders := strings.Split(logHeadersList, ",")
+	forwardHeaders := strings.Split(forwardHeadersList, ",")
 
 	mux := route.New().WithInstrumentation(func(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
 		return promhttp.InstrumentHandlerCounter(
@@ -81,7 +89,7 @@ func main() {
 			),
 		)
 	})
-	mux.Post(path, handlerFunc(logger, remoteWriteAddress, http.DefaultTransport))
+	mux.Post(path, handlerFunc(logger, remoteWriteAddress, http.DefaultTransport, logHeaders, forwardHeaders))
 	mux.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	level.Info(logger).Log("msg", "Starting server", "listen_address", listenAddress, "path", path, "remote_write_address", remoteWriteAddress)
@@ -91,14 +99,19 @@ func main() {
 	}
 }
 
-func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.RoundTripper) http.HandlerFunc {
+func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.RoundTripper, logHeaders, forwardHeaders []string) http.HandlerFunc {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
 
 	return func(rw http.ResponseWriter, req *http.Request) {
 		username, password, basicAuth := req.BasicAuth()
-		logger := log.With(logger, "remote_addr", req.RemoteAddr, "basic_auth", basicAuth, "basic_user", username)
+		kvs := []interface{}{"remote_addr", req.RemoteAddr, "basic_auth", basicAuth, "basic_user", username}
+		for _, h := range logHeaders {
+			kvs = append(kvs, h, req.Header.Get(h))
+		}
+		logger := log.With(logger, kvs...)
+
 		var writeRequest *prompb.WriteRequest
 		decoder := json.NewDecoder(req.Body)
 		defer req.Body.Close()
@@ -136,6 +149,9 @@ func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.Ro
 			level.Error(logger).Log("msg", "can't build outgoing request", "err", err)
 			http.Error(rw, "can't build outgoing request", http.StatusInternalServerError)
 			return
+		}
+		for _, h := range forwardHeaders {
+			outreq.Header.Set(h, req.Header.Get(h))
 		}
 
 		if basicAuth {

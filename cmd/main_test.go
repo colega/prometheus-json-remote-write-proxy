@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/storage/remote"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +50,6 @@ var writeRequestFixture = &prompb.WriteRequest{
 
 func TestRemoteWrite(t *testing.T) {
 	t.Run("happy case", func(t *testing.T) {
-
 		logger := log.NewNopLogger()
 
 		appendable := &mockAppendable{}
@@ -57,7 +57,7 @@ func TestRemoteWrite(t *testing.T) {
 		remoteServer := httptest.NewServer(remoteWriteHandler)
 		t.Cleanup(remoteServer.Close)
 
-		testServer := httptest.NewServer(handlerFunc(logger, remoteServer.URL, nil))
+		testServer := httptest.NewServer(handlerFunc(logger, remoteServer.URL, nil, nil, nil))
 		t.Cleanup(testServer.Close)
 
 		data, err := json.Marshal(writeRequestFixture)
@@ -89,7 +89,7 @@ func TestRemoteWrite(t *testing.T) {
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
-		handler := handlerFunc(log.NewNopLogger(), "http://localhost", nil)
+		handler := handlerFunc(log.NewNopLogger(), "http://localhost", nil, nil, nil)
 
 		invalidJSON := `{"timeseries": {}}` // should be an array of timeseries, not an object
 		req, err := http.NewRequest("", "", strings.NewReader(invalidJSON))
@@ -100,6 +100,70 @@ func TestRemoteWrite(t *testing.T) {
 
 		resp := recorder.Result()
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("basic auth", func(t *testing.T) {
+		logger := log.NewNopLogger()
+
+		const (
+			username = "user"
+			password = "pass"
+		)
+
+		remoteServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			u, p, auth := req.BasicAuth()
+			assert.True(t, auth)
+			assert.Equal(t, username, u)
+			assert.Equal(t, password, p)
+
+			rw.WriteHeader(http.StatusUnauthorized)
+		}))
+		t.Cleanup(remoteServer.Close)
+
+		testServer := httptest.NewServer(handlerFunc(logger, remoteServer.URL, nil, nil, nil))
+		t.Cleanup(testServer.Close)
+
+		data, err := json.Marshal(writeRequestFixture)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest(http.MethodPost, testServer.URL, bytes.NewBuffer(data))
+		req.SetBasicAuth(username, password)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("forwarded header", func(t *testing.T) {
+		logger := log.NewNopLogger()
+
+		const (
+			orgIDHeader = "X-Scope-OrgID"
+			orgID       = "42"
+		)
+
+		remoteServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			assert.Equal(t, orgID, req.Header.Get(orgIDHeader))
+			rw.WriteHeader(http.StatusUnauthorized)
+		}))
+		t.Cleanup(remoteServer.Close)
+
+		testServer := httptest.NewServer(handlerFunc(logger, remoteServer.URL, nil, []string{orgIDHeader}, []string{orgIDHeader}))
+		t.Cleanup(testServer.Close)
+
+		data, err := json.Marshal(writeRequestFixture)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest(http.MethodPost, testServer.URL, bytes.NewBuffer(data))
+		req.Header.Set(orgIDHeader, orgID)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }
 
