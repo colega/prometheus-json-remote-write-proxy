@@ -15,7 +15,5 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         push: true
-        tags:
-        - colega/prometheus-json-remote-write-proxy:latest
-        - colega/prometheus-json-remote-write-proxy:${{ github.sha }}
+        tags: colega/prometheus-json-remote-write-proxy:latest,colega/prometheus-json-remote-write-proxy:${{ github.sha }}
 name: build-and-push-docker
