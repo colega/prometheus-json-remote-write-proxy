@@ -1,0 +1,2 @@
+(github.com/go-kit/log.Logger).Log
+io.Copy

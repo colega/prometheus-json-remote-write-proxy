@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/golang/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -82,7 +82,10 @@ func main() {
 	mux.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	level.Info(logger).Log("msg", "Starting server", "listen_address", listenAddress, "remote_write_address", remoteWriteAddress)
-	http.ListenAndServe(listenAddress, mux)
+	err := http.ListenAndServe(listenAddress, mux)
+	if err != http.ErrServerClosed {
+		level.Warn(logger).Log("msg", "can't listen", "err", err)
+	}
 }
 
 func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.RoundTripper) http.HandlerFunc {
@@ -122,8 +125,8 @@ func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.Ro
 		if buf != nil {
 			buf = buf[0:cap(buf)]
 		}
-		compressed := snappy.Encode(nil, pBuf.Bytes())
-		defer bufPool.Put(compressed)
+		compressed := snappy.Encode(buf, pBuf.Bytes())
+		defer bufPool.Put(compressed) //nolint:staticcheck
 
 		outreq, err := http.NewRequest(http.MethodPost, remoteWriteAddress, bytes.NewReader(compressed))
 		if err != nil {
