@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -103,8 +104,8 @@ func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.Ro
 		defer req.Body.Close()
 
 		if err := decoder.Decode(&writeRequest); err != nil {
-			level.Warn(logger).Log("msg", "can't build outgoing request", "err", err)
-			http.Error(rw, "can't build outgoing request", http.StatusInternalServerError)
+			level.Warn(logger).Log("msg", "invalid request", "err", err)
+			http.Error(rw, fmt.Sprintf("invalid request: %s", err), http.StatusBadRequest)
 			return
 		}
 
