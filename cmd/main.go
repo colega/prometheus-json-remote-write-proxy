@@ -165,8 +165,8 @@ func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.Ro
 		if err != nil {
 			level.Error(logger).Log("msg", "can't forward request", "err", err)
 			http.Error(rw, "can't forward request", http.StatusBadGateway)
+			return
 		}
-		defer resp.Body.Close()
 
 		lvl := level.Info
 		if resp.StatusCode%100 > 3 {

@@ -102,6 +102,22 @@ func TestRemoteWrite(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
+	t.Run("transport error", func(t *testing.T) {
+		rt := httpRoundtripperFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("can't dial or whatever")
+		})
+		handler := handlerFunc(log.NewNopLogger(), "http://localhost", rt, nil, nil)
+
+		req, err := http.NewRequest("", "", strings.NewReader(`{}`))
+		require.NoError(t, err)
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+
+		resp := recorder.Result()
+		require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	})
+
 	t.Run("basic auth", func(t *testing.T) {
 		logger := log.NewNopLogger()
 
@@ -232,4 +248,10 @@ func (m *mockAppendable) AppendExemplar(_ storage.SeriesRef, l labels.Labels, e 
 	m.latestExemplar = e.Ts
 	m.exemplars = append(m.exemplars, mockExemplar{l, e.Labels, e.Ts, e.Value})
 	return 0, nil
+}
+
+type httpRoundtripperFunc func(req *http.Request) (*http.Response, error)
+
+func (f httpRoundtripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
