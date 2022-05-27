@@ -50,9 +50,11 @@ var (
 func main() {
 	var (
 		listenAddress      string
+		path               string
 		remoteWriteAddress string
 	)
 	flag.StringVar(&listenAddress, "listen-address", "0.0.0.0:9091", "Listen address of the server.")
+	flag.StringVar(&path, "path", "/write", "Path where write requests will be received.")
 	flag.StringVar(&remoteWriteAddress, "remote-write-address", "", "Address where remote writes should be sent.")
 	flag.Parse()
 
