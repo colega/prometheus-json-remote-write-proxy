@@ -106,7 +106,10 @@ func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.Ro
 
 	return func(rw http.ResponseWriter, req *http.Request) {
 		username, password, basicAuth := req.BasicAuth()
-		kvs := []interface{}{"remote_addr", req.RemoteAddr, "basic_auth", basicAuth, "basic_user", username}
+		kvs := []interface{}{"remote_addr", req.RemoteAddr, "basic_auth", basicAuth}
+		if basicAuth {
+			kvs = append(kvs, "basic_user", username)
+		}
 		for _, h := range logHeaders {
 			kvs = append(kvs, h, req.Header.Get(h))
 		}
