@@ -64,7 +64,7 @@ func main() {
 	flag.StringVar(&forwardHeadersList, "forward-headers", "", "Comma-separated list of headers to forward (useful for Mimir's X-Org-ScopeID header)")
 	flag.Parse()
 
-	logger := log.NewLogfmtLogger(os.Stdout)
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stdout))
 
 	if remoteWriteAddress == "" {
 		level.Error(logger).Log("msg", "should specify a remote-write-address, but was empty")
@@ -74,8 +74,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	logHeaders := strings.Split(logHeadersList, ",")
-	forwardHeaders := strings.Split(forwardHeadersList, ",")
+	logHeaders := commaSeparatedNonEmptyStrings(logHeadersList)
+	forwardHeaders := commaSeparatedNonEmptyStrings(forwardHeadersList)
 
 	mux := route.New().WithInstrumentation(func(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
 		return promhttp.InstrumentHandlerCounter(
@@ -181,3 +181,10 @@ func handlerFunc(logger log.Logger, remoteWriteAddress string, transport http.Ro
 
 var pBufPool = sync.Pool{New: func() interface{} { return proto.NewBuffer(nil) }}
 var bufPool = sync.Pool{New: func() interface{} { return []byte(nil) }}
+
+func commaSeparatedNonEmptyStrings(s string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
