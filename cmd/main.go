@@ -80,10 +80,10 @@ func main() {
 			),
 		)
 	})
-	mux.Post("/write", handlerFunc(logger, remoteWriteAddress, http.DefaultTransport))
+	mux.Post(path, handlerFunc(logger, remoteWriteAddress, http.DefaultTransport))
 	mux.Get("/metrics", promhttp.Handler().ServeHTTP)
 
-	level.Info(logger).Log("msg", "Starting server", "listen_address", listenAddress, "remote_write_address", remoteWriteAddress)
+	level.Info(logger).Log("msg", "Starting server", "listen_address", listenAddress, "path", path, "remote_write_address", remoteWriteAddress)
 	err := http.ListenAndServe(listenAddress, mux)
 	if err != http.ErrServerClosed {
 		level.Warn(logger).Log("msg", "can't listen", "err", err)
